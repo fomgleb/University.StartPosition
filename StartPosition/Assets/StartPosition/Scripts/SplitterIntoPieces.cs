@@ -6,7 +6,6 @@ using UnityEngine.Events;
 
 namespace StartPosition.Scripts
 {
-    
     [ExecuteAlways]
     public class SplitterIntoPieces : MonoBehaviour
     {
