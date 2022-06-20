@@ -164,20 +164,6 @@ namespace StartPosition.Scripts
             OnCoroutineEnd();
         }
 
-        private Vector3 GetPositionOnCircumference(float angle)
-        {
-            var circleCenter = _mainModelMeshRenderer.transform.position;
-                
-            var position = new Vector3
-            {
-                x = circleCenter.x + circleRadius * Mathf.Cos(angle * Mathf.Deg2Rad),
-                y = circleCenter.y,
-                z = circleCenter.z + circleRadius * Mathf.Sin(angle * Mathf.Deg2Rad)
-            };
-
-            return position;
-        }
-
         private Vector3 GetPositionOnSphere(int currentPointIndex, int pointsCount)
         {
             var y = 1 - currentPointIndex / (float)(pointsCount - 1) * 2;
