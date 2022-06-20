@@ -2,6 +2,7 @@ using System;
 using System.Collections;
 using StartPosition.Extensions;
 using UnityEngine;
+using UnityEngine.Events;
 
 namespace StartPosition.Scripts
 {
@@ -14,6 +15,9 @@ namespace StartPosition.Scripts
         [SerializeField] private AnimationCurve rotationCurve;
         [SerializeField] private Vector3 rotationAxis;
         [SerializeField] private bool startRotationAtStart;
+        [Header("Events")]
+        [SerializeField] private UnityEvent OnStartRotation;
+        [SerializeField] private UnityEvent OnEndRotation;
 
         private Vector3 _startingPosition;
         private Quaternion _startingRotation;
@@ -25,7 +29,10 @@ namespace StartPosition.Scripts
             _startingPosition = transform.position;
             _startingRotation = transform.rotation;
             if (startRotationAtStart)
+            {
                 StartRotation();
+                OnStartRotation?.Invoke();
+            }
         }
 
         private void Update()
@@ -41,8 +48,10 @@ namespace StartPosition.Scripts
         
         public void StopRotationAndReturnToStartingPosition()
         {
-            StopCoroutine(RotateCoroutine());
+            StopAllCoroutines();
             transform.position = _startingPosition;
+            transform.rotation = _startingRotation;
+            OnEndRotation.Invoke();
         }
 
         private IEnumerator RotateCoroutine()

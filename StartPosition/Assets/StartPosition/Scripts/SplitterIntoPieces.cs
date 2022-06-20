@@ -1,4 +1,3 @@
-using System;
 using System.Collections;
 using StartPosition.Extensions;
 using UnityEngine;
@@ -9,177 +8,145 @@ namespace StartPosition.Scripts
     [ExecuteAlways]
     public class SplitterIntoPieces : MonoBehaviour
     {
+        [Header("For each piece")]
         [SerializeField] private float circleRadius = 10f;
-        [SerializeField][Range(0, 360)] private float startingAngle;
+        [SerializeField] private float waitBeforeMove;
+        [SerializeField] private float movementTime;
+        [SerializeField] private AnimationCurve movementCurve;
+        [SerializeField] private float rotationTime;
+        [SerializeField] private Vector3 rotationAngles;
+        [SerializeField] private AnimationCurve rotationCurve;
         [Header("Events")]
         [SerializeField] private UnityEvent onStartedMoving;
         [SerializeField] private UnityEvent onEndedMoving;
-        [Header("Model")]
-        [SerializeField] private Transform main;
-        [SerializeField] private Piece[] pieces;
+
+        private MeshRenderer _mainModelMeshRenderer;
+        private Piece[] _pieces;
+
+        private float _areaUnderMovementCurve;
+        private float _areaUnderRotationCurve;
 
         private uint _numberOfRunningCoroutines;
-        private bool _coroutineIsRunning;
-        
-        public Piece[] Pieces => pieces;
+        private Action _currentAction;
 
-        [HideInInspector] public float waitTimeForAllPieces;
-        [HideInInspector] public float moveTimeForAllPieces;
-        [HideInInspector] public AnimationCurve movementCurveForAllPieces;
-        [HideInInspector] public float rotationTimeForAllPieces;
-        [HideInInspector] public Vector3 rotationAnglesForAllPieces;
-        [HideInInspector] public AnimationCurve rotationCurveForAllPieces;
+        private float _phi;
         
-        private void Update()
+        private void Awake()
         {
-            if (!Application.isPlaying)
-                foreach (var piece in pieces)
-                {
-                    piece.movementCurve.CorrectKeys(new Keyframe(0, 0), new Keyframe(1, 1));
-                    piece.rotationCurve.CorrectKeys(new Keyframe(0, 0), new Keyframe(1, 1));
-                }
-            else
-            {
-                if (_numberOfRunningCoroutines > 0)
-                {
-                    if (_coroutineIsRunning) return;
-                    _coroutineIsRunning = true;
-                    onStartedMoving?.Invoke();
-                    return;
-                }
+            if (!Application.isPlaying) return;
 
-                if (_coroutineIsRunning)
-                {
-                    _coroutineIsRunning = false;
-                    onEndedMoving?.Invoke();
-                }
-            }
+            _phi = Mathf.PI * (3f - Mathf.Sqrt(5f));
+
+            _areaUnderMovementCurve = movementCurve.GetAreaUnderCurve(1, 1);
+            _areaUnderRotationCurve = rotationCurve.GetAreaUnderCurve(1, 1);
+            
+            _mainModelMeshRenderer = GetComponent<MeshRenderer>();
+            var meshRenderersInChildren = GetComponentsInChildren<MeshRenderer>();
+            _pieces = new Piece[meshRenderersInChildren.Length];
+            for (var i = 0; i < _pieces.Length; i++)
+                _pieces[i] = new Piece(meshRenderersInChildren[i]);
         }
 
         private void Start()
         {
             if (!Application.isPlaying) return;
             
-            SetActiveMainAndPieces(true, false);
-            foreach (var piece in pieces)
-                piece.StartingPosition = piece.Transform.position;
+            SetMainModelVisibility(true);
+            SetPiecesVisibility(false);
         }
-        
+
+        private void Update()
+        {
+            if (Application.isPlaying) return;
+            
+            movementCurve?.CorrectKeys(new Keyframe(0, 0), new Keyframe(1, 1));
+            rotationCurve?.CorrectKeys(new Keyframe(0, 0), new Keyframe(1, 1));
+        }
+
         public void SplitIntoPieces()
         {
             if (_numberOfRunningCoroutines <= 0)
                 StartCoroutine(SplitIntoPiecesCoroutine());
+            _currentAction = Action.SplitIntoPieces;
         }
 
         public void GatherPiecesTogether()
         {
             if (_numberOfRunningCoroutines <= 0)
                 StartCoroutine(GatherPiecesTogetherCoroutine());
+            _currentAction = Action.GatherPiecesTogether;
         }
-        
+
         private IEnumerator SplitIntoPiecesCoroutine()
         {
-            _numberOfRunningCoroutines++;
+            OnCoroutineStart();
             
-            SetActiveMainAndPieces(false, true);
-
-            var angleBetweenTwoPieces = 360f / pieces.Length;
-            var currentAngle = startingAngle;
-
-            foreach (var piece in pieces)
+            SetMainModelVisibility(false);
+            SetPiecesVisibility(true);
+            
+            for (var i = 0; i < _pieces.Length; i++)
             {
-                var destination = GetPositionOnCircumference(currentAngle);
-                yield return new WaitForSeconds(piece.waitBeforeMove);
+                var piece = _pieces[i];
+                var destination = GetPositionOnSphere(i, _pieces.Length);
+                yield return new WaitForSeconds(waitBeforeMove);
                 StartCoroutine(MovePieceCoroutine(piece, destination));
-                StartCoroutine(RotatePieceCoroutine(piece.Transform, piece.rotationTime, piece.rotationAngles,
-                    piece.rotationCurve));
-
-                currentAngle += angleBetweenTwoPieces;
+                StartCoroutine(RotatePieceCoroutine(piece.Transform, rotationTime, rotationAngles, rotationCurve));
             }
 
-            _numberOfRunningCoroutines--;
+            OnCoroutineEnd();
         }
-        
+
         private IEnumerator GatherPiecesTogetherCoroutine()
         {
-            _numberOfRunningCoroutines++;
+            OnCoroutineStart();
             
-            for (var i = pieces.Length - 1; i >= 0; i--)
+            for (var i = _pieces.Length - 1; i >= 0; i--)
             {
-                var piece = pieces[i];
+                var piece = _pieces[i];
                 
                 var destination = piece.StartingPosition;
-                var pieceRotationAngles = -piece.rotationAngles;
-                yield return new WaitForSeconds(piece.waitBeforeMove);
+                yield return new WaitForSeconds(waitBeforeMove);
                 StartCoroutine(MovePieceCoroutine(piece, destination));
-                StartCoroutine(RotatePieceCoroutine(piece.Transform, piece.rotationTime, pieceRotationAngles,
-                    piece.rotationCurve));
+                StartCoroutine(RotatePieceCoroutine(piece.Transform, rotationTime, -rotationAngles, rotationCurve));
             }
 
-            yield return new WaitForSeconds(Math.Max(pieces[0].movementTime, pieces[0].rotationTime));
-            
-            SetActiveMainAndPieces(true, false);
-
-            _numberOfRunningCoroutines--;
-        }
-        
-        private Vector3 GetPositionOnCircumference(float angle)
-        {
-            var circleCenter = Vector3.zero;
-            if (main != null)
-                circleCenter = main.position;
-            else
-            {
-                foreach (var piece in pieces)
-                    circleCenter += piece.StartingPosition;
-                circleCenter /= pieces.Length;
-            }
-                
-            var position = new Vector3
-            {
-                x = circleCenter.x + circleRadius * Mathf.Cos(angle * Mathf.Deg2Rad),
-                y = circleCenter.y,
-                z = circleCenter.z + circleRadius * Mathf.Sin(angle * Mathf.Deg2Rad)
-            };
-
-            return position;
+            OnCoroutineEnd();
         }
 
         private IEnumerator MovePieceCoroutine(Piece piece, Vector3 destination)
         {
-            _numberOfRunningCoroutines++;
+            OnCoroutineStart();
             
-            var areaUnderMovementCurve = piece.movementCurve.GetAreaUnderCurve(1, 1);
             var distanceToTarget = Vector3.Distance(piece.Transform.position, destination);
-            var pieceSpeed = distanceToTarget / piece.movementTime;
+            var pieceSpeed = movementTime != 0 ? distanceToTarget / movementTime : float.MaxValue;
             
-            for (var elapsedTime = 0f; elapsedTime <= piece.movementTime; elapsedTime += Time.deltaTime)
+            for (var elapsedTime = 0f; elapsedTime <= movementTime; elapsedTime += Time.deltaTime)
             {
-                var modifiedSpeed = piece.movementCurve.Evaluate(elapsedTime / piece.movementTime) * pieceSpeed /
-                                    areaUnderMovementCurve;
+                var modifiedSpeed = movementTime != 0
+                    ? movementCurve.Evaluate(elapsedTime / movementTime) * pieceSpeed / _areaUnderMovementCurve
+                    : pieceSpeed;
                 var step = Time.deltaTime * modifiedSpeed;
                 piece.Transform.position = Vector3.MoveTowards(piece.Transform.position, destination, step);
                 yield return null;
             }
             piece.Transform.position = destination;
 
-            _numberOfRunningCoroutines--;
+            OnCoroutineEnd();
         }
 
         private IEnumerator RotatePieceCoroutine(Transform pieceTransform, float rotationTime, Vector3 rotationAngles,
             AnimationCurve rotationCurve)
         {
-            _numberOfRunningCoroutines++;
+            OnCoroutineStart();
 
             var startingRotation = pieceTransform.rotation;
             
-            var areaUnderRotationCurve = rotationCurve.GetAreaUnderCurve(1, 1);
             var rotationSpeed = rotationAngles / rotationTime;
 
             for (var elapsedTime = 0f; elapsedTime <= rotationTime; elapsedTime += Time.deltaTime)
             {
                 var modifiedSpeed = rotationCurve.Evaluate(elapsedTime / rotationTime) * rotationSpeed /
-                                    areaUnderRotationCurve;
+                                    _areaUnderRotationCurve;
                 var rotationStep = Time.deltaTime * modifiedSpeed;
                 pieceTransform.Rotate(rotationStep);
                 //pieceTransform.Rotate(new Vector3(0, 1, 0), rotationStep.y);
@@ -194,36 +161,96 @@ namespace StartPosition.Scripts
             pieceTransform.Rotate(rotationAngles);
             //pieceTransform.rotation = Quaternion.Euler(rotationAngles + startingRotation.eulerAngles); 
 
-            _numberOfRunningCoroutines--;
+            OnCoroutineEnd();
         }
 
-        private void SetActiveMainAndPieces(bool activeMain, bool activePieces)
+        private Vector3 GetPositionOnCircumference(float angle)
         {
-            if (main == null)
+            var circleCenter = _mainModelMeshRenderer.transform.position;
+                
+            var position = new Vector3
             {
-                foreach (var piece in pieces)
-                    piece.Transform.gameObject.SetActive(true);
+                x = circleCenter.x + circleRadius * Mathf.Cos(angle * Mathf.Deg2Rad),
+                y = circleCenter.y,
+                z = circleCenter.z + circleRadius * Mathf.Sin(angle * Mathf.Deg2Rad)
+            };
+
+            return position;
+        }
+
+        private Vector3 GetPositionOnSphere(int currentPointIndex, int pointsCount)
+        {
+            var y = 1 - currentPointIndex / (float)(pointsCount - 1) * 2;
+            var radius = Mathf.Sqrt(1 - y * y);
+
+            var theta = _phi * currentPointIndex;
+
+            var x = Mathf.Cos(theta) * radius;
+            var z = Mathf.Sin(theta) * radius;
+
+            return new Vector3(x, y, z) * circleRadius;
+        }
+
+        private void OnCoroutineStart()
+        {
+            if (_numberOfRunningCoroutines == 0)
+                onStartedMoving?.Invoke();
+
+            _numberOfRunningCoroutines++;
+        }
+
+        private void OnCoroutineEnd()
+        {
+            _numberOfRunningCoroutines--;
+
+            if (_numberOfRunningCoroutines != 0) return;
+
+            if (_currentAction == Action.GatherPiecesTogether)
+            {
+                SetMainModelVisibility(true);
+                SetPiecesVisibility(false);
+            }
+            
+            onEndedMoving?.Invoke();
+        }
+
+        private void SetMainModelVisibility(bool isVisible)
+        {
+            if (_mainModelMeshRenderer != null)
+                _mainModelMeshRenderer.enabled = isVisible;
+        }
+
+        private void SetPiecesVisibility(bool isVisible)
+        {
+            if (_mainModelMeshRenderer == null)
+            {
+                foreach (var piecesMeshRenderer in _pieces)
+                    piecesMeshRenderer.MeshRenderer.enabled = true;
                 return;
             }
 
-            main.gameObject.SetActive(activeMain);
-            foreach (var piece in pieces)
-                piece.Transform.gameObject.SetActive(activePieces);
+            foreach (var piecesMeshRenderer in _pieces)
+                piecesMeshRenderer.MeshRenderer.enabled = isVisible;
         }
-    }
 
-    [Serializable]
-    public class Piece
-    {
-        [SerializeField] private Transform transform;
-        public float waitBeforeMove;
-        public float movementTime;
-        public AnimationCurve movementCurve;
-        public float rotationTime;
-        public Vector3 rotationAngles;
-        public AnimationCurve rotationCurve;
-        
-        public Transform Transform => transform;
-        public Vector3 StartingPosition { get; set; }
+        private class Piece
+        {
+            public MeshRenderer MeshRenderer { get; }
+            public Transform Transform { get; }
+            public Vector3 StartingPosition { get; }
+
+            public Piece(MeshRenderer meshRenderer)
+            {
+                MeshRenderer = meshRenderer;
+                Transform = meshRenderer.transform;
+                StartingPosition = meshRenderer.transform.position;
+            }
+        }
+
+        private enum Action
+        {
+            SplitIntoPieces,
+            GatherPiecesTogether
+        }
     }
 }

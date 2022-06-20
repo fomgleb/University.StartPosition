@@ -28,7 +28,7 @@
     &quot;RunOnceActivity.ShowReadmeOnStart&quot;: &quot;true&quot;,
     &quot;WebServerToolWindowFactoryState&quot;: &quot;false&quot;,
     &quot;rider.run.widget.enabled.cache&quot;: &quot;false&quot;,
-    &quot;settings.editor.selected.configurable&quot;: &quot;preferences.pluginManager&quot;,
+    &quot;settings.editor.selected.configurable&quot;: &quot;preferences.keymap&quot;,
     &quot;vue.rearranger.settings.migration&quot;: &quot;true&quot;
   }
 }</component>
@@ -72,6 +72,9 @@
       <updated>1655540338017</updated>
       <workItem from="1655540338019" duration="604000" />
       <workItem from="1655541339698" duration="100000" />
+      <workItem from="1655617993574" duration="4785000" />
+      <workItem from="1655643109213" duration="13597000" />
+      <workItem from="1655704113762" duration="2594000" />
     </task>
     <servers />
   </component>
